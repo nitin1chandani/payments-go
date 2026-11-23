@@ -9,10 +9,26 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
+
+	"github.com/nitin1chandani/payments/internal/platform/postgres"
 )
 
 func main() {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+
+	dsn := os.Getenv("WALLET_DATABASE_URL")
+	if dsn == "" {
+		// local development default
+		dsn = "postgres://postgres:postgres@localhost:5432/wallet?sslmode=disable"
+	}
+
+	pool, err := postgres.NewPool(context.Background(), dsn)
+	if err != nil {
+		logger.Error("connect to postgres", "err", err)
+		os.Exit(1)
+	}
+
+	logger.Info("connected to postgres", "max_conns", pool.Config().MaxConns)
 
 	mux := http.NewServeMux()
 
@@ -20,6 +36,20 @@ func main() {
 		logger.Info("health check", "remote", r.RemoteAddr)
 		w.Header().Set("Content-Type", "application/json")
 		w.Write([]byte(`{"status":"ok"}` + "\n"))
+	})
+
+	mux.HandleFunc("GET /readyz", func(w http.ResponseWriter, r *http.Request) {
+		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+		defer cancel()
+
+		w.Header().Set("Content-Type", "application/json")
+		if err := pool.Ping(ctx); err != nil {
+			logger.Warn("not ready: database unreachable", "err", err)
+			w.WriteHeader(http.StatusServiceUnavailable)
+			w.Write([]byte(`{"service":"unavailable"}` + "\n"))
+			return
+		}
+		w.Write([]byte(`{"service":"ready"}`))
 	})
 
 	srv := &http.Server{
@@ -41,6 +71,8 @@ func main() {
 
 	<-ctx.Done()
 
+	// close the server
+
 	// waiting for graceful shutdown
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -51,5 +83,9 @@ func main() {
 	}
 
 	logger.Info("server stopped")
+
+	// close the pool
+	pool.Close()
+	logger.Info("database pool closed")
 
 }
