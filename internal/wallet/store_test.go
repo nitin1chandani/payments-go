@@ -65,7 +65,7 @@ func TestPostTransaction(t *testing.T) {
 	tx, err := s.PostTransaction(t.Context(), wallet.NewTransaction{
 		Description: "alice deposits $50",
 		Postings: []wallet.Posting{
-			{AccountID: bank, Direction: wallet.Debit, Amount: 5000}, {AccountID: alice, Direction: wallet.Credit, Amount: 5000, Currency: "USD"},
+			{AccountID: bank, Direction: wallet.Debit, Amount: 5000, Currency: "USD"}, {AccountID: alice, Direction: wallet.Credit, Amount: 5000, Currency: "USD"},
 		},
 	})
 
@@ -74,7 +74,7 @@ func TestPostTransaction(t *testing.T) {
 	}
 
 	if got := balance(t, s, bank); got != 5000 {
-		t.Errorf("bank balance = %d, want 5000", 5000)
+		t.Errorf("bank balance = %d, want 5000", got)
 	}
 
 	if got := balance(t, s, alice); got != 5000 {
